@@ -1,0 +1,4 @@
+FROM docker-proxy.nexus.lcl.leven.dev/owncloud/server:latest
+COPY root.crt /root.crt
+RUN cat /root.crt >> /etc/ssl/certs/ca-certificates.crt \
+    && rm /root.crt

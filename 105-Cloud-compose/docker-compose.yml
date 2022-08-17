@@ -1,0 +1,133 @@
+version: "3"
+
+services:
+  owncloud:
+    image: docker-linux.nexus.lcl.leven.dev/infra/owncloud-trusted:latest
+    container_name: owncloud
+    restart: unless-stopped
+    #ports:
+    #  - 8080:8080
+    depends_on:
+      - owncloud_db
+      - owncloud_redis
+    environment:
+      - OWNCLOUD_DOMAIN=cloud.leven.dev
+      - OWNCLOUD_DB_TYPE=mysql
+      - OWNCLOUD_DB_NAME=owncloud
+      - OWNCLOUD_DB_USERNAME=owncloud
+      - OWNCLOUD_DB_PASSWORD=${OWNCLOUD_DB_PASS}
+      - OWNCLOUD_DB_HOST=owncloud_db
+      - OWNCLOUD_ADMIN_USERNAME=adminuser
+      - OWNCLOUD_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - OWNCLOUD_MYSQL_UTF8MB4=true
+      - OWNCLOUD_REDIS_ENABLED=true
+      - OWNCLOUD_REDIS_HOST=owncloud_redis
+    healthcheck:
+      test: ["CMD", "/usr/bin/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - owncloud_data:/mnt/data
+    networks:
+      - caddy_net
+      - owncloud_db_net
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+  owncloud_db:
+    image: docker-proxy.nexus.lcl.leven.dev/mariadb:latest
+    container_name: owncloud_db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${OWNCLOUD_DB_PASS}
+      - MYSQL_USER=owncloud
+      - MYSQL_PASSWORD=${OWNCLOUD_DB_PASS}
+      - MYSQL_DATABASE=owncloud
+    command: ["--max-allowed-packet=128M", "--innodb-log-file-size=64M"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-u", "root", "--password=pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - owncloud_db_data:/var/lib/mysql
+    networks:
+      - owncloud_db_net
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+  owncloud_redis:
+    image: docker-proxy.nexus.lcl.leven.dev/redis:latest
+    container_name: owncloud_redis
+    restart: unless-stopped
+    command: ["--databases", "1"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - owncloud_redis_data:/data
+    networks:
+      - owncloud_db_net
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+  watchtower:
+    image: docker-proxy.nexus.lcl.leven.dev/containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - NO_COLOR=true
+      - WATCHTOWER_POLL_INTERVAL=21600
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_ROLLING_RESTART=true
+      - WATCHTOWER_TIMEOUT=200s
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+  portainer-agent:
+    image: docker-proxy.nexus.lcl.leven.dev/portainer/agent:latest
+    container_name: portainer-agent
+    hostname: portainer-agent
+    restart: unless-stopped
+    environment:
+      - AGENT_SECRET=${AGENT_SECRET}
+    ports:
+      - 9001:9001
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /var/lib/docker/volumes:/var/lib/docker/volumes:ro
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+  caddy:
+    image: docker-proxy.nexus.lcl.leven.dev/caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    volumes:
+      - /opt/compose/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/compose/root_ca.crt:/root_ca.crt:ro
+      #- $PWD/site:/srv
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - caddy_net
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+volumes:
+  owncloud_data:
+    external: true
+  owncloud_db_data:
+    external: true
+  owncloud_redis_data:
+    external: true
+  caddy_data:
+    external: true
+  caddy_config:
+    external: true
+
+networks:
+  caddy_net:
+  owncloud_db_net:

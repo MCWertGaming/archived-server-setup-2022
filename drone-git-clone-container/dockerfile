@@ -1,0 +1,4 @@
+FROM drone/git:linux-amd64
+COPY root.crt /root.crt
+RUN cat /root.crt >> /etc/ssl/certs/ca-certificates.crt \
+    && rm /root.crt
